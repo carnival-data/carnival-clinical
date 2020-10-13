@@ -1,0 +1,238 @@
+/**
+ *
+ * CARNIVAL ASYNC
+ *
+ */
+
+
+///////////////////////////////////////////////////////////////////////////////
+// build script settings
+///////////////////////////////////////////////////////////////////////////////
+buildscript {
+    repositories {
+        mavenCentral()
+        jcenter()
+    }
+    dependencies {
+        classpath group: 'org.yaml', name: 'snakeyaml', version: '1.23'
+    }    
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// plugins
+///////////////////////////////////////////////////////////////////////////////
+plugins {
+    id 'groovy'
+    id "com.github.ManifestClasspath" version "0.1.0-RELEASE"
+    id 'maven-publish'
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// project
+///////////////////////////////////////////////////////////////////////////////
+group = 'edu.upenn.pmbb'
+sourceCompatibility = 1.8
+version = '0.3.1-SNAPSHOT'   // see https://semver.org/
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// dependencies
+///////////////////////////////////////////////////////////////////////////////
+repositories {
+    mavenCentral()
+    jcenter()
+    mavenLocal()
+}
+
+
+configurations {
+    providedRuntime
+}
+
+
+// In this section you declare the dependencies for your production and test code
+dependencies {
+    implementation group:'edu.upenn.pmbb', name:'carnival-core', version:'0.3.1-SNAPSHOT'
+    implementation group:'edu.upenn.pmbb', name:'carnival-gremlin-dsl', version:'0.3.1-SNAPSHOT'
+
+    // We use the awesome Spock testing and specification framework
+    testCompile 'org.spockframework:spock-core:1.2-groovy-2.5'
+
+    // tinkerpop
+    implementation 'org.apache.tinkerpop:gremlin-core:3.4.3'
+    implementation 'org.apache.tinkerpop:gremlin-groovy:3.4.3'
+    implementation 'org.apache.tinkerpop:tinkergraph-gremlin:3.4.3'
+
+    // Neo4J
+    implementation 'org.apache.tinkerpop:neo4j-gremlin:3.4.3'
+    implementation 'org.neo4j:neo4j-tinkerpop-api-impl:0.9-3.4.0'
+
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// BUILD 
+///////////////////////////////////////////////////////////////////////////////
+task createProperties(dependsOn: processResources) {
+  doLast {
+    new File("$buildDir/resources/main/version.properties").withWriter { w ->
+        Properties p = new Properties()
+        p['version'] = project.version.toString()
+        p.store w, null
+    }
+  }
+}
+
+classes {
+    dependsOn createProperties
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// TASKS - CLI
+///////////////////////////////////////////////////////////////////////////////
+
+task carnivalLocalDirInit (dependsOn: ['classes'], type: JavaExec) {
+    description 'Run CarnivalLocalDirInit script'
+
+    main = 'carnival.core.cli.CarnivalLocalDirInit'
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+
+    if (System.getProperty('carnival.home')) {
+        systemProperty('carnival.home', System.getProperty('carnival.home'))
+        systemProperty('logback.configurationFile', System.getProperty('carnival.home') + '/config/logback.xml')
+    }
+    if (System.env.CARNIVAL_HOME) {
+        systemProperty('logback.configurationFile', System.env.CARNIVAL_HOME + '/config/logback.xml')
+    }
+    if (System.getProperty('logback.configurationFile')) {
+        systemProperty("logback.configurationFile", System.getProperty('logback.configurationFile'))
+    } else if (System.env.CARNIVAL_LOGBACK_CONFIG) {
+        systemProperty("logback.configurationFile", System.env.CARNIVAL_LOGBACK_CONFIG)
+    }
+    if (!(System.getProperty('carnival.home') || System.env.CARNIVAL_HOME)) {
+        ant.echo "WARNING: Carnival home is not set. Use command line argument -Dcarnival.home= or environment variable CARNIVAL_HOME. See documentation."
+        if (!(System.getProperty('logback.configurationFile') || System.env.CARNIVAL_LOGBACK_CONFIG)) {
+            ant.echo "WARNING: Logback configuration file not set. Use the -D command line argument like -Dlogback.configurationFile=/path/to/file.xml.  Or, set the environment variable CARNIVAL_LOGBACK_CONFIG to /path/to/file.xml. See documentation."
+        }
+    }
+
+    jvmArgs '-Xms512m'
+    jvmArgs '-Xmx512m'
+}
+
+test.dependsOn 'carnivalLocalDirInit'
+
+
+///////////////////////////////////////////////////////////////////////////////
+// TEST
+///////////////////////////////////////////////////////////////////////////////
+test {
+    systemProperty 'vine.config.file.path', System.getProperty('vine.config.file.path')
+    systemProperty 'cgis.use.cached.data.files', System.getProperty('cgis.use.cached.data.files')
+    systemProperty 'cgis.use.cached.graph', System.getProperty('cgis.use.cached.graph')
+    systemProperty 'test.http', System.getProperty('test.http') ?: true
+    systemProperty 'test.graph.rollback', System.getProperty('test.graph.rollback')
+    systemProperty 'allow.redcap.modification', System.getProperty('allow.redcap.modification')
+    systemProperty 'disable.filevine.tests', System.getProperty('disable.filevine.tests')
+    testLogging {
+        events 'standard_out'
+    }
+
+    if (System.getProperty('carnival.home')) {
+        systemProperty('carnival.home', System.getProperty('carnival.home'))
+        systemProperty('logback.configurationFile', System.getProperty('carnival.home') + '/config/logback.xml')
+    }
+    if (System.env.CARNIVAL_HOME) {
+        systemProperty('carnival.home', System.env.CARNIVAL_HOME)
+        systemProperty('logback.configurationFile', System.env.CARNIVAL_HOME + '/config/logback.xml')
+    }
+    if (System.getProperty('logback.configurationFile')) {
+        systemProperty("logback.configurationFile", System.getProperty('logback.configurationFile'))
+    } else if (System.env.CARNIVAL_LOGBACK_CONFIG) {
+        systemProperty("logback.configurationFile", System.env.CARNIVAL_LOGBACK_CONFIG)
+    }
+    if (!(System.getProperty('carnival.home') || System.env.CARNIVAL_HOME)) {
+        ant.echo "WARNING: Carnival home is not set. Use command line argument -Dcarnival.home= or environment variable CARNIVAL_HOME. See documentation."
+        if (!(System.getProperty('logback.configurationFile') || System.env.CARNIVAL_LOGBACK_CONFIG)) {
+            ant.echo "WARNING: Logback configuration file not set. Use the -D command line argument like -Dlogback.configurationFile=/path/to/file.xml.  Or, set the environment variable CARNIVAL_LOGBACK_CONFIG to /path/to/file.xml. See documentation."
+        }
+    }
+
+    jvmArgs '-Xms4g'
+    jvmArgs '-Xmx6g'
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// maven publishing
+///////////////////////////////////////////////////////////////////////////////
+
+publishToMavenLocal.dependsOn 'compileJava'
+
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    classifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    classifier = 'javadoc'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = 'carnival-gremlin-dsl'
+            from components.java
+            artifact sourcesJar
+            //artifact javadocJar
+            pom.withXml {
+                asNode().children().last() + {
+                    resolveStrategy = Closure.DELEGATE_FIRST
+                    name 'Carnival Gremlin DSL'
+                    description 'A concise description of Carnival Gremlin DSL'
+                    url 'https://pennbiobank.github.io/carnival/'
+                    licenses {
+                        license {
+                            name 'The Apache License, Version 2.0'
+                            url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id 'hjwilli'
+                            name 'Heather Williams'
+                            email 'hjwilli@gmail.com'
+                        }
+						developer {
+                            id 'augustearth'
+                            name 'David Birtwell'
+                            email 'augustearth@gmail.com'
+                        }
+                    }
+                    scm {
+                        connection 'scm:git:git://github.com:pennbiobank/carnival.git'
+                        developerConnection 'scm:git:ssh://github.com:pennbiobank/carnival.git'
+                        url 'https://github.com/pennbiobank/carnival'
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            // change URLs to point to your repos, e.g. http://my.org/repo
+            def releasesRepoUrl = "$buildDir/repos/releases"
+            def snapshotsRepoUrl = "$buildDir/repos/snapshots"
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+        }
+    }
+}
